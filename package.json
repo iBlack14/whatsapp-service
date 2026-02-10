@@ -13,6 +13,8 @@
         "qrcode": "^1.5.4",
         "express": "^4.21.0",
         "cors": "^2.8.5",
-        "puppeteer": "^24.0.0"
+        "puppeteer": "^24.0.0",
+        "mongoose": "^8.0.0",
+        "wwebjs-mongo": "^1.1.0"
     }
 }

@@ -1,4 +1,6 @@
-const { Client, LocalAuth } = require('whatsapp-web.js');
+const { Client, RemoteAuth } = require('whatsapp-web.js');
+const { MongoStore } = require('wwebjs-mongo');
+const mongoose = require('mongoose');
 const express = require('express');
 const cors = require('cors');
 const QRCode = require('qrcode');
@@ -13,79 +15,111 @@ let qrCodeData = null;
 let connectionStatus = 'disconnected'; // disconnected | qr_pending | connected
 let clientInfo = null;
 let isClientReady = false;
+let client = null;
+
+// Connect to MongoDB
+const MONGO_URI = process.env.MONGO_DB_URI;
+
+if (!MONGO_URI) {
+    console.error('❌ MONGO_DB_URI is missing in environment variables');
+} else {
+    mongoose.connect(MONGO_URI).then(() => {
+        console.log('✅ Connected to MongoDB');
+        const store = new MongoStore({ mongoose: mongoose });
+
+        // Initialize WhatsApp client with RemoteAuth
+        client = new Client({
+            authStrategy: new RemoteAuth({
+                store: store,
+                backupSyncIntervalMs: 300000
+            }),
+            webVersionCache: {
+                type: 'remote',
+                remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.2412.54.html',
+            },
+            puppeteer: {
+                headless: true,
+                executablePath: puppeteer.executablePath(),
+                args: [
+                    '--no-sandbox',
+                    '--disable-setuid-sandbox',
+                    '--disable-dev-shm-usage',
+                    '--disable-accelerated-2d-canvas',
+                    '--no-first-run',
+                    '--no-zygote',
+                    '--single-process',
+                    '--disable-gpu'
+                ]
+            }
+        });
+
+        setupClientEvents();
+        client.initialize();
+    }).catch(err => {
+        console.error('❌ MongoDB connection error:', err);
+    });
+}
 
 // Root route for health check
 app.get('/', (req, res) => res.send('WhatsApp Service is running 🚀'));
 
-// Initialize WhatsApp client with local auth
-const client = new Client({
-    authStrategy: new LocalAuth({ dataPath: './whatsapp-session' }),
-    webVersionCache: {
-        type: 'remote',
-        remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.2412.54.html',
-    },
-    puppeteer: {
-        headless: true,
-        executablePath: puppeteer.executablePath(),
-        args: [
-            '--no-sandbox',
-            '--disable-setuid-sandbox',
-            '--disable-dev-shm-usage',
-            '--disable-accelerated-2d-canvas',
-            '--no-first-run',
-            '--no-zygote',
-            '--single-process', // Important for low memory on Render
-            '--disable-gpu'
-        ]
-    }
-});
+// ============ CLIENT EVENTS ============
 
-// QR Event
-client.on('qr', async (qr) => {
-    console.log('📱 QR Code received, scan with WhatsApp');
-    connectionStatus = 'qr_pending';
-    try {
-        qrCodeData = await QRCode.toDataURL(qr, { width: 300, margin: 2 });
-    } catch (err) {
-        console.error('Error generating QR:', err);
-    }
-});
+function setupClientEvents() {
+    // QR Event
+    client.on('qr', async (qr) => {
+        console.log('📱 QR Code received, scan with WhatsApp');
+        connectionStatus = 'qr_pending';
+        try {
+            qrCodeData = await QRCode.toDataURL(qr, { width: 300, margin: 2 });
+        } catch (err) {
+            console.error('Error generating QR:', err);
+        }
+    });
 
-// Ready Event
-client.on('ready', () => {
-    console.log('✅ WhatsApp client is ready!');
-    connectionStatus = 'connected';
-    isClientReady = true;
-    qrCodeData = null;
-    clientInfo = {
-        name: client.info?.pushname || 'Unknown',
-        phone: client.info?.wid?.user || 'Unknown',
-        platform: client.info?.platform || 'Unknown'
-    };
-});
+    // Ready Event
+    client.on('ready', () => {
+        console.log('✅ WhatsApp client is ready!');
+        connectionStatus = 'connected';
+        isClientReady = true;
+        qrCodeData = null;
+        clientInfo = {
+            name: client.info?.pushname || 'Unknown',
+            phone: client.info?.wid?.user || 'Unknown',
+            platform: client.info?.platform || 'Unknown'
+        };
+    });
 
-// Auth Success
-client.on('authenticated', () => {
-    console.log('🔐 Authentication successful');
-    // Don't set connected here - wait for 'ready' event
-    qrCodeData = null;
-});
+    // Auth Success
+    client.on('authenticated', () => {
+        console.log('🔐 Authentication successful');
+        // Don't set connected here - wait for 'ready' event
+        qrCodeData = null;
+    });
 
-// Auth Failure
-client.on('auth_failure', (msg) => {
-    console.error('❌ Authentication failed:', msg);
-    connectionStatus = 'disconnected';
-    qrCodeData = null;
-});
+    // Auth Failure
+    client.on('auth_failure', (msg) => {
+        console.error('❌ Authentication failed:', msg);
+        connectionStatus = 'disconnected';
+        qrCodeData = null;
+    });
 
-// Disconnected
-client.on('disconnected', (reason) => {
-    console.log('🔌 Disconnected:', reason);
-    connectionStatus = 'disconnected';
-    isClientReady = false;
-    qrCodeData = null;
-    clientInfo = null;
-});
+    // Disconnected
+    client.on('disconnected', (reason) => {
+        console.log('🔌 Disconnected:', reason);
+        connectionStatus = 'disconnected';
+        isClientReady = false;
+        qrCodeData = null;
+        clientInfo = null;
+        // Optional: Re-initialize client after disconnect if needed
+        // client.initialize(); 
+    });
+
+    // Remote Session Saved
+    client.on('remote_session_saved', () => {
+        console.log('💾 Remote session saved to MongoDB');
+    });
+}
 
 // ============ API ENDPOINTS ============
 
@@ -117,7 +151,7 @@ app.post('/api/send', async (req, res) => {
             return res.status(400).json({ success: false, error: 'Phone and message are required' });
         }
 
-        if (connectionStatus !== 'connected' || !isClientReady) {
+        if (connectionStatus !== 'connected' || !isClientReady || !client) {
             return res.status(503).json({ success: false, error: 'WhatsApp not connected. Please scan QR first.' });
         }
 
@@ -147,7 +181,7 @@ app.post('/api/send', async (req, res) => {
 // GET /api/chats - Get recent chats
 app.get('/api/chats', async (req, res) => {
     try {
-        if (connectionStatus !== 'connected' || !isClientReady) {
+        if (connectionStatus !== 'connected' || !isClientReady || !client) {
             return res.status(503).json({ success: false, error: 'WhatsApp not connected' });
         }
 
@@ -176,7 +210,7 @@ app.get('/api/chats', async (req, res) => {
 // GET /api/messages/:chatId - Get messages from a chat
 app.get('/api/messages/:chatId', async (req, res) => {
     try {
-        if (connectionStatus !== 'connected') {
+        if (connectionStatus !== 'connected' || !client) {
             return res.status(503).json({ success: false, error: 'WhatsApp not connected' });
         }
 
@@ -204,7 +238,7 @@ app.get('/api/messages/:chatId', async (req, res) => {
 // POST /api/disconnect - Disconnect session
 app.post('/api/disconnect', async (req, res) => {
     try {
-        await client.logout();
+        if (client) await client.logout();
         connectionStatus = 'disconnected';
         qrCodeData = null;
         clientInfo = null;
@@ -219,6 +253,4 @@ app.post('/api/disconnect', async (req, res) => {
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 WhatsApp Service running on port ${PORT}`);
-    console.log('⏳ Initializing WhatsApp client...');
-    client.initialize();
 });
