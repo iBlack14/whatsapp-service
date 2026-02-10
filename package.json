@@ -1,0 +1,16 @@
+{
+    "name": "whatsapp-service",
+    "version": "1.0.0",
+    "description": "WhatsApp Web service for Soporte dashboard",
+    "main": "server.js",
+    "scripts": {
+        "start": "node server.js",
+        "dev": "node server.js"
+    },
+    "dependencies": {
+        "whatsapp-web.js": "^1.26.1-alpha.3",
+        "qrcode": "^1.5.4",
+        "express": "^4.21.0",
+        "cors": "^2.8.5"
+    }
+}
