@@ -46,8 +46,6 @@ if (!MONGO_URI) {
                     '--disable-dev-shm-usage',
                     '--disable-accelerated-2d-canvas',
                     '--no-first-run',
-                    '--no-zygote',
-                    '--single-process',
                     '--disable-gpu'
                 ]
             }
@@ -66,6 +64,11 @@ app.get('/', (req, res) => res.send('WhatsApp Service is running 🚀'));
 // ============ CLIENT EVENTS ============
 
 function setupClientEvents() {
+    // Loading Screen
+    client.on('loading_screen', (percent, message) => {
+        console.log('⏳ Loading:', percent, '%', message);
+    });
+
     // QR Event
     client.on('qr', async (qr) => {
         console.log('📱 QR Code received, scan with WhatsApp');
