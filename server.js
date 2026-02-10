@@ -205,9 +205,9 @@ app.post('/api/disconnect', async (req, res) => {
 });
 
 // Start server
-const PORT = 3001;
-app.listen(PORT, () => {
-    console.log(`🚀 WhatsApp Service running on http://localhost:${PORT}`);
+const PORT = process.env.PORT || 3001;
+app.listen(PORT, '0.0.0.0', () => {
+    console.log(`🚀 WhatsApp Service running on port ${PORT}`);
     console.log('⏳ Initializing WhatsApp client...');
     client.initialize();
 });
