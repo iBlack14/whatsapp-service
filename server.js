@@ -2,6 +2,7 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 const express = require('express');
 const cors = require('cors');
 const QRCode = require('qrcode');
+const puppeteer = require('puppeteer');
 
 const app = express();
 app.use(cors());
@@ -18,6 +19,7 @@ const client = new Client({
     authStrategy: new LocalAuth({ dataPath: './whatsapp-session' }),
     puppeteer: {
         headless: true,
+        executablePath: puppeteer.executablePath(),
         args: [
             '--no-sandbox',
             '--disable-setuid-sandbox',
