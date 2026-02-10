@@ -14,9 +14,16 @@ let connectionStatus = 'disconnected'; // disconnected | qr_pending | connected
 let clientInfo = null;
 let isClientReady = false;
 
-// Initialize WhatsApp client with local auth (persists session)
+// Root route for health check
+app.get('/', (req, res) => res.send('WhatsApp Service is running 🚀'));
+
+// Initialize WhatsApp client with local auth
 const client = new Client({
     authStrategy: new LocalAuth({ dataPath: './whatsapp-session' }),
+    webVersionCache: {
+        type: 'remote',
+        remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.2412.54.html',
+    },
     puppeteer: {
         headless: true,
         executablePath: puppeteer.executablePath(),
@@ -26,6 +33,8 @@ const client = new Client({
             '--disable-dev-shm-usage',
             '--disable-accelerated-2d-canvas',
             '--no-first-run',
+            '--no-zygote',
+            '--single-process', // Important for low memory on Render
             '--disable-gpu'
         ]
     }
