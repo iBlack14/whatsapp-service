@@ -5,12 +5,14 @@
     "main": "server.js",
     "scripts": {
         "start": "node server.js",
-        "dev": "node server.js"
+        "dev": "node server.js",
+        "postinstall": "npx puppeteer browsers install chrome"
     },
     "dependencies": {
         "whatsapp-web.js": "^1.26.1-alpha.3",
         "qrcode": "^1.5.4",
         "express": "^4.21.0",
-        "cors": "^2.8.5"
+        "cors": "^2.8.5",
+        "puppeteer": "^24.0.0"
     }
 }
